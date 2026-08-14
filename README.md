@@ -1,119 +1,70 @@
 # dsh-browser
 
-> Playwright-backed browser automation for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Drive a real Microsoft Edge browser from your agent — **no CDP endpoint, no MCP server**.
+给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 用的浏览器插件。装上之后，AI 就能直接开一个真实的 Edge 浏览器去逛网页、点按钮、填表单、截图——**不用配 CDP、也不用跑 MCP**，装完就能用。
 
-`dsh-browser` is a DeepSeek Harness **bundle** (an installable plugin). Install it into a profile, and the agent gains a `browser_*` tool suite that opens a real browser, reads pages, clicks, types, and screenshots — driven in-process by Playwright over the installed Edge.
+底层是 Playwright，直接驱动你电脑上已经装好的 Edge，所以页面行为和真人浏览完全一致（cookie、JS、登录态都在）。
 
----
+## 怎么用
 
-## Why
-
-- **Zero extra infra.** It launches Edge directly through Playwright's `msedge` channel. You don't set up a Chrome DevTools port and you don't run an MCP server.
-- **Real browser.** Because it drives Edge, pages behave exactly like the user's own browsing (cookies, JS, redirects, login).
-- **Per-conversation isolation.** One shared browser process, but each agent conversation gets its own context — tabs, cookies, and login state never leak between sessions, and they're cleaned up when the conversation ends.
-
-## Requirements
-
-- Node.js 22+
-- The `dsh` CLI (or a source checkout run as `pnpm dsh`)
-- **Microsoft Edge** installed (Playwright uses it via the `msedge` channel — no browser download)
-
-## Install
-
-Install into a profile:
+一行命令装进某个 profile：
 
 ```sh
-# from GitHub
-dsh plugin --profile <profile> add github:duyefeng/dsh-browser
-
-# or from npm, once published
-dsh plugin --profile <profile> add dsh-browser
+dsh plugin --profile <你的 profile 名> add github:duyefeng/dsh-browser
 ```
 
-Then boot the profile:
+然后启动：
 
 ```sh
-dsh --profile <profile>
+dsh --profile <你的 profile 名>
 ```
 
-For the web UI surface, use the `web` profile:
+如果你用的是网页版（web 界面），就装进 `web`：
 
 ```sh
 dsh plugin --profile web add github:duyefeng/dsh-browser
 dsh web
 ```
 
-> **Note:** install into the profile, then restart it. The bundle layer is read at boot — a plain `dsh web` restart without the `add` does nothing.
+> 小提醒：装完之后要**重启**一下 profile。插件是在启动时读取的，光重启不 `add` 等于没装。
 
-## Tools
+装好之后，直接在对话里说人话就行，比如：
 
-| Tool | Description |
+- “打开 example.com，读一下正文，告诉我标题”
+- “打开百度搜‘天气’，把第一条结果的标题给我”
+- “打开这个登录页，填好账号密码，截个图给我看”
+
+AI 会自动调用对应的浏览器工具。
+
+## 有哪些工具
+
+| 工具 | 干嘛的 |
 | --- | --- |
-| `browser_navigate(url)` | Open a URL (bare hosts upgrade to `https://`). Returns the final URL and page title. |
-| `browser_snapshot()` | Read the current page: URL, title, visible text, and interactive elements with CSS selectors. |
-| `browser_click(selector)` | Click the first element matching a CSS selector. |
-| `browser_type(selector, text)` | Replace the value of an input / textarea. |
-| `browser_press(key)` | Press a key (`Enter`, `Tab`, `Escape`, `ArrowDown`, …). |
-| `browser_evaluate(expression)` | Run a JavaScript expression in the page and return its JSON value. |
-| `browser_screenshot()` | Capture the page as a PNG and return its path (view with `read_image`). |
-| `browser_close()` | Close this conversation's browser session. |
+| `browser_navigate(url)` | 打开网址 |
+| `browser_snapshot()` | 读取当前页面（标题、正文、可点元素） |
+| `browser_click(selector)` | 点击某个元素 |
+| `browser_type(selector, text)` | 往输入框里填字 |
+| `browser_press(key)` | 按键盘（Enter、Tab、Esc…） |
+| `browser_evaluate(expression)` | 在页面里跑一段 JS |
+| `browser_screenshot()` | 截图，返回图片路径 |
+| `browser_close()` | 关掉本次会话的浏览器 |
 
-### Example prompt
+## 想改默认行为
 
-> Open https://example.com, read the page, and tell me the title and body.
-
-The agent calls `browser_navigate` → `browser_snapshot` and answers from the returned content.
-
-## Configuration
-
-The bundle inserts a `browser` service row with these defaults. Override them in the profile's own `cordis.patch.yml` (a later layer wins per row):
+在 profile 自己的 `cordis.patch.yml` 里覆盖 `browser` 这一行就行：
 
 ```yaml
 - id: browser
   config:
-    channel: msedge      # Playwright channel; msedge = installed Edge
-    headless: false      # false = visible browser window, true = headless
-    timeoutMs: 30000     # per-operation Playwright timeout (ms)
-    screenshotDir: null  # where screenshots land; null = OS temp dir
+    channel: msedge      # 浏览器渠道，msedge = 用已装的 Edge
+    headless: false      # false = 弹窗（能看到浏览器），true = 无头后台跑
+    timeoutMs: 30000     # 单次操作的超时（毫秒）
 ```
 
-## How it works
+## 环境要求
 
-The bundle contributes two host-plane rows through its `cordis.patch.yml`:
-
-- `browser` — the `ctx.browser` service. Owns one shared, lazily launched Playwright browser and a per-agent `BrowserContext` keyed by the agent's session id.
-- `tool-browser` — registers the `browser_*` tools into the host `tools` registry, visible to every session.
-
-Because the tools register at the host plane, they're available in every agent session without any preset wiring — installing this one bundle is all that's needed.
-
-## Local development
-
-The `@deepseek-ai/cordis` / `@deepseek-ai/dsh-tools` imports resolve from the harness installation at runtime, so this package never fetches them from npm. A local `pnpm install` therefore installs only `playwright-core`:
-
-```sh
-pnpm install
-pnpm pack          # produces dsh-browser-0.1.0.tgz
-dsh plugin --profile demo add ./dsh-browser-0.1.0.tgz
-dsh --profile demo
-```
-
-> **Gotcha:** `dsh plugin add ./dsh-browser` (a bare directory path) installs with a `link:` spec that symlinks to the checkout *outside* the profile, which breaks resolution of the harness peers (`Cannot find package '@deepseek-ai/…'`). Always `pnpm pack` and add the tarball (or use `github:`/npm) instead.
-
-## Verify it's mounted
-
-```sh
-dsh --profile demo --dump-config
-```
-
-The output should contain:
-
-```
-# == dsh-browser
-- id: browser
-  name: dsh-browser
-- id: tool-browser
-  name: dsh-browser/tool
-```
+- Node.js 22+
+- 装了 Microsoft Edge（没有其他浏览器也行，就是需要 Edge）
+- 有 `dsh` 命令行（或源码 checkout 里用 `pnpm dsh`）
 
 ## License
 
