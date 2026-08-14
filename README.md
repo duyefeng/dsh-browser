@@ -9,13 +9,13 @@
 一行命令安装：
 
 ```sh
-pnpm dsh plugin --profile web add github:duyefeng/dsh-browser
+dsh plugin --profile web add github:duyefeng/dsh-browser
 ```
 
 然后启动：
 
 ```sh
-pnpm dsh web
+dsh web
 ```
 
 > 小提醒：装完之后要**重启**一下 profile。插件是在启动时读取的，光重启不 `add` 等于没装。
