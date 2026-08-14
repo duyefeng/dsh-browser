@@ -1,73 +1,120 @@
 # dsh-browser
 
-Playwright-backed browser automation for the DeepSeek Harness. It drives the installed **Microsoft Edge** directly — no CDP debugging port and no MCP server — and exposes a `browser_*` tool suite to the agent.
+> Playwright-backed browser automation for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Drive a real Microsoft Edge browser from your agent — **no CDP endpoint, no MCP server**.
 
-## What you get
+`dsh-browser` is a DeepSeek Harness **bundle** (an installable plugin). Install it into a profile, and the agent gains a `browser_*` tool suite that opens a real browser, reads pages, clicks, types, and screenshots — driven in-process by Playwright over the installed Edge.
 
-| Tool | What it does |
-| --- | --- |
-| `browser_navigate(url)` | Open a URL (bare hosts upgrade to `https://`). |
-| `browser_snapshot()` | Read the page: URL, title, text, and interactive elements with CSS selectors. |
-| `browser_click(selector)` | Click the first element matching a CSS selector. |
-| `browser_type(selector, text)` | Replace the value of an input. |
-| `browser_press(key)` | Press a key (`Enter`, `Tab`, `Escape`, `ArrowDown`, …). |
-| `browser_evaluate(expression)` | Run a JS expression in the page. |
-| `browser_screenshot()` | Save the page as PNG and return its path (view with `read_image`). |
-| `browser_close()` | Close this conversation's browser session. |
+---
 
-The browser process is shared; each agent conversation gets an isolated context (tabs, cookies, login state), closed automatically when the conversation ends.
+## Why
+
+- **Zero extra infra.** It launches Edge directly through Playwright's `msedge` channel. You don't set up a Chrome DevTools port and you don't run an MCP server.
+- **Real browser.** Because it drives Edge, pages behave exactly like the user's own browsing (cookies, JS, redirects, login).
+- **Per-conversation isolation.** One shared browser process, but each agent conversation gets its own context — tabs, cookies, and login state never leak between sessions, and they're cleaned up when the conversation ends.
 
 ## Requirements
 
-- Node.js 22+ and the DeepSeek Harness CLI.
-- **Microsoft Edge** installed (Playwright drives it via the `msedge` channel — no browser download needed).
+- Node.js 22+
+- The `dsh` CLI (or a source checkout run as `pnpm dsh`)
+- **Microsoft Edge** installed (Playwright uses it via the `msedge` channel — no browser download)
 
 ## Install
 
-From GitHub (the intended way to share it):
+Install into a profile:
 
 ```sh
-dsh plugin --profile demo add github:you/dsh-browser
+# from GitHub
+dsh plugin --profile <profile> add github:<you>/dsh-browser
+
+# or from npm, once published
+dsh plugin --profile <profile> add dsh-browser
 ```
 
-Or from npm once published:
+Then boot the profile:
 
 ```sh
-dsh plugin --profile demo add dsh-browser
+dsh --profile <profile>
 ```
 
-Or from a packed tarball (local testing):
+For the web UI surface, use the `web` profile:
 
 ```sh
-pnpm pack                                   # produces dsh-browser-0.1.0.tgz
-dsh plugin --profile demo add ./dsh-browser-0.1.0.tgz
+dsh plugin --profile web add github:<you>/dsh-browser
+dsh web
 ```
 
-Boot the profile:
+> **Note:** install into the profile, then restart it. The bundle layer is read at boot — a plain `dsh web` restart without the `add` does nothing.
 
-```sh
-dsh --profile demo
-```
+## Tools
 
-> **Note on local development:** `dsh plugin add ./dsh-browser` (a bare directory path) installs with a `link:` spec, which symlinks to the checkout *outside* the profile. Node then resolves this package's peer imports (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-tools`) from the checkout instead of the profile's module fallback, so the load fails with `Cannot find package`. Use the tarball (`pnpm pack`) or `file:` form for local testing; `github:`/npm installs materialize the package inside the profile and resolve peers correctly.
+| Tool | Description |
+| --- | --- |
+| `browser_navigate(url)` | Open a URL (bare hosts upgrade to `https://`). Returns the final URL and page title. |
+| `browser_snapshot()` | Read the current page: URL, title, visible text, and interactive elements with CSS selectors. |
+| `browser_click(selector)` | Click the first element matching a CSS selector. |
+| `browser_type(selector, text)` | Replace the value of an input / textarea. |
+| `browser_press(key)` | Press a key (`Enter`, `Tab`, `Escape`, `ArrowDown`, …). |
+| `browser_evaluate(expression)` | Run a JavaScript expression in the page and return its JSON value. |
+| `browser_screenshot()` | Capture the page as a PNG and return its path (view with `read_image`). |
+| `browser_close()` | Close this conversation's browser session. |
+
+### Example prompt
+
+> Open https://example.com, read the page, and tell me the title and body.
+
+The agent calls `browser_navigate` → `browser_snapshot` and answers from the returned content.
 
 ## Configuration
 
-The bundle inserts the `browser` service row with these defaults; override them in the profile's `cordis.patch.yml` (a later layer wins per row):
+The bundle inserts a `browser` service row with these defaults. Override them in the profile's own `cordis.patch.yml` (a later layer wins per row):
 
 ```yaml
 - id: browser
   config:
-    channel: msedge      # Playwright channel; msedge uses the installed Edge
-    headless: false      # set true for a hidden browser window
-    timeoutMs: 30000     # per-operation Playwright timeout
+    channel: msedge      # Playwright channel; msedge = installed Edge
+    headless: false      # false = visible browser window, true = headless
+    timeoutMs: 30000     # per-operation Playwright timeout (ms)
+    screenshotDir: null  # where screenshots land; null = OS temp dir
 ```
 
-## Notes
+## How it works
 
-- `headless: false` (default) opens a visible Edge window, matching "open a browser and operate it". Set `headless: true` for headless automation.
-- Screenshots are written to the OS temp dir by default; override `screenshotDir` in the `browser` row to choose another location.
+The bundle contributes two host-plane rows through its `cordis.patch.yml`:
+
+- `browser` — the `ctx.browser` service. Owns one shared, lazily launched Playwright browser and a per-agent `BrowserContext` keyed by the agent's session id.
+- `tool-browser` — registers the `browser_*` tools into the host `tools` registry, visible to every session.
+
+Because the tools register at the host plane, they're available in every agent session without any preset wiring — installing this one bundle is all that's needed.
+
+## Local development
+
+The `@deepseek-ai/cordis` / `@deepseek-ai/dsh-tools` imports resolve from the harness installation at runtime, so this package never fetches them from npm. A local `pnpm install` therefore installs only `playwright-core`:
+
+```sh
+pnpm install
+pnpm pack          # produces dsh-browser-0.1.0.tgz
+dsh plugin --profile demo add ./dsh-browser-0.1.0.tgz
+dsh --profile demo
+```
+
+> **Gotcha:** `dsh plugin add ./dsh-browser` (a bare directory path) installs with a `link:` spec that symlinks to the checkout *outside* the profile, which breaks resolution of the harness peers (`Cannot find package '@deepseek-ai/…'`). Always `pnpm pack` and add the tarball (or use `github:`/npm) instead.
+
+## Verify it's mounted
+
+```sh
+dsh --profile demo --dump-config
+```
+
+The output should contain:
+
+```
+# == dsh-browser
+- id: browser
+  name: dsh-browser
+- id: tool-browser
+  name: dsh-browser/tool
+```
 
 ## License
 
-MIT
+[MIT](./LICENSE)
