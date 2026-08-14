@@ -24,7 +24,7 @@ Install into a profile:
 
 ```sh
 # from GitHub
-dsh plugin --profile <profile> add github:<you>/dsh-browser
+dsh plugin --profile <profile> add github:duyefeng/dsh-browser
 
 # or from npm, once published
 dsh plugin --profile <profile> add dsh-browser
@@ -39,7 +39,7 @@ dsh --profile <profile>
 For the web UI surface, use the `web` profile:
 
 ```sh
-dsh plugin --profile web add github:<you>/dsh-browser
+dsh plugin --profile web add github:duyefeng/dsh-browser
 dsh web
 ```
 
