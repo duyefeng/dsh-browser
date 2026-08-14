@@ -6,23 +6,16 @@
 
 ## 怎么用
 
-一行命令装进某个 profile：
+一行命令安装：
 
 ```sh
-dsh plugin --profile <你的 profile 名> add github:duyefeng/dsh-browser
+pnpm dsh plugin --profile web add github:duyefeng/dsh-browser
 ```
 
 然后启动：
 
 ```sh
-dsh --profile <你的 profile 名>
-```
-
-如果你用的是网页版（web 界面），就装进 `web`：
-
-```sh
-dsh plugin --profile web add github:duyefeng/dsh-browser
-dsh web
+pnpm dsh web
 ```
 
 > 小提醒：装完之后要**重启**一下 profile。插件是在启动时读取的，光重启不 `add` 等于没装。
