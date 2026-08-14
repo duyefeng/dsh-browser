@@ -1,0 +1,8 @@
+# Out-of-tree plugins do NOT fetch their @deepseek-ai/* peers from npm: the
+# DeepSeek Harness installation provides them at runtime through the healed
+# $DSH_HOME/profiles/node_modules fallback. autoInstallPeers: false mirrors the
+# profile's own workspace settings so `pnpm install` here installs only
+# playwright-core and never tries to resolve unpublished harness packages.
+packages:
+  - .
+autoInstallPeers: false
