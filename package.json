@@ -1,0 +1,30 @@
+{
+  "name": "dsh-browser",
+  "version": "0.1.0",
+  "description": "Playwright-backed browser automation for DeepSeek Harness — drives the installed Microsoft Edge directly (no CDP endpoint, no MCP server) and exposes browser_* tools to the agent.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./tool": "./tool.js"
+  },
+  "files": [
+    "index.js",
+    "tool.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "license": "MIT"
+}
